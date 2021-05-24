@@ -55,98 +55,93 @@ get_yn () {
 }
 
 
-src_dir="./CleanedBackup_working/"
-dest_dir="./ProcessedSongs/"
-
+# Could not use '~' - threw 'no such dir/file error'
+src_dir="/home/ben/Music/CleanedBackup/"
 
 # Flow
 # 1. Unpack
 # 2. Detox
-# 3. Flatten
-# 4. Find+Remove zero-byte files
-# 5. Convert each type to mp3 w corresponding bitrates (a priori), delete original file
-# 6. Verify num-songs-in = num-songs-out, now just only mp3s
+# 3. Find+Remove zero-byte files
+# 4. Convert each type to mp3 w corresponding bitrates (a priori), delete original file
+# 5. Verify num-songs-in = num-songs-out, now just only mp3s
 #
-# Before (5), need to (once)
+# Before (4), need to (once)
 # a. Dump bitrates
 # b. Average bitrates - determine settings for conversion of each type
 #
 
-## 1. Unpack
-#unzip ~/Downloads/cleaned_zips/Cleaned\ Backup\ \(old\ and\ duplicates\ deleted\)-20200102T054547Z-00\*.zip -d ~/Music/
-#mv ~/Music/Cleaned\ Backup\ \(old\ and\ duplicates\ deleted\) ~/Music/CleanedBackup
-
+### 1. Unpack
+unzip ~/Downloads/cleaned_zips/Cleaned\ Backup\ \(old\ and\ duplicates\ deleted\)-20200102T054547Z-00\*.zip -d ~/Music/
+mv ~/Music/Cleaned\ Backup\ \(old\ and\ duplicates\ deleted\) ~/Music/CleanedBackup
 print_num_types $src_dir;
 echo ''
+read -p "Done unpacking, press any key to continue"
 
-## 2. Detox the filenames (and dirs?)
+
+### 2. Detox the filenames (and dirs?)
 # NB: 'detox' seems to handle dir names too- ran quick test w 'a nasty dir'/'a nasty file .aiff'
 detox -r $src_dir
 print_num_types $src_dir;
 echo ''
+read -p "Done detox, press any key to continue"
 
-## 3. Flatten files
-# Pick out the filename- cant seem to reference dest_dir in xargs cli string below
-# so doing it this way- only possible after file detox
-# Have to mkdir first- otherwise mv complains-
-# Included -p on mkdir to make it safe/quiet if dir already exists
-mkdir -p $dest_dir;
-full_paths=( $(find $src_dir -type f) );
-for i in ${full_paths[@]}
-do
-	# NB: if this has already run, then full_paths will be empty
-	# so we wont even get here to throw 'src doesnt exist' error
-	# NB: dest_dir MUST have trailing '/'
-	mv -i "$i" $dest_dir
-done
 
-print_num_types $dest_dir
-exit
-
-## 4. Find+Remove zero-byte files
+### 3. Find+Remove zero-byte files
 # Print 0-byte files, then delete
 echo "Zero-byte files:"
-find $dest_dir -type f -size 0; # print
-find $dest_dir -type f -size 0 -print0 | xargs -0 -I{} rm '{}' # remove
+find $src_dir -type f -size 0; # print
+find $src_dir -type f -size 0 -print0 | xargs -0 -I{} rm '{}' # remove
 echo ''
+print_num_types $src_dir;
+echo ''
+read -p "Done removing 0B files, press any key to continue"
 
 
 # Before conversion
-print_num_types $dest_dir;
-num_files_pre_cnv=$(find $dest_dir -type f | wc -l)
-num_zb_files_pre_cnv=$(find $dest_dir -type f -size 0 | wc -l)
+num_files_pre_cnv=$(find $src_dir -type f | wc -l)
+num_zb_files_pre_cnv=$(find $src_dir -type f -size 0 | wc -l)
 expected_num_out=$(echo $num_files_pre_cnv-$num_zb_files_pre_cnv | bc);
-echo ''
 
 
-## (a+b) Dump bitrates for m4a and aiff and average
-dump_bitrates $dest_dir m4a
-avg_bitrate m4a;
-dump_bitrates $dest_dir aiff
-avg_bitrate aiff;
+### (a+b) Dump bitrates for m4a and aiff and average
+#dump_bitrates $src_dir m4a
+#avg_bitrate m4a;
+#dump_bitrates $src_dir aiff
+#avg_bitrate aiff;
+#exit
 
 
-exit
-## 5a. Convert all aiff's to mp3's using 320 CBR (incurs loss)
+### 4a. Convert all aiff's to mp3's using 320 CBR (incurs loss)
 # Keep name- only change extension, delete the original aiff
-aiff_paths=$(find $dest_dir -name *.aiff -type f);
+aiff_paths=$(find $src_dir -name *.aiff -type f);
 for i in ${aiff_paths[@]}
 do
 	#echo $i | sed -n -e s/\.aiff$/\.mp3/p; # Test
-	ffmpeg -i $i -codec:a libmp3lame -b:a 320k $(echo $i | sed -n -e s/\.aiff$/\.mp3/p);
-	rm $i
+	ffmpeg -i "$i" -codec:a libmp3lame -b:a 320k $(echo "$i" | sed -n -e s/\.aiff$/\.mp3/p);
+	rm "$i"
 done
-exit
-
-
-## 5b. Convert all m4a's to mp3's using 220-260 VBR
-#TODO
-
-
-## 6. Print filetypes post processing
-print_num_types $dest_dir;
+print_num_types $src_dir;
 echo ''
+read -p "Done converting aiff->mp3, press any key to continue"
+
+
+### 4b. Convert all m4a's to mp3's using 220-260 VBR
+m4a_paths=$(find $src_dir -name *.m4a -type f);
+for i in ${m4a_paths[@]}
+do
+	#echo $i | sed -n -e s/\.m4a$/\.mp3/p; # Test
+	ffmpeg -i "$i" -codec:a libmp3lame -q:a 0 $(echo "$i" | sed -n -e s/\.m4a$/\.mp3/p);
+	rm "$i"
+done
+print_num_types $src_dir;
+echo ''
+read -p "Done converting m4a->mp3, press any key to continue"
+
+
+### 5. Print filetypes post processing
 echo "Expected num: $expected_num_out"
+echo Done
+echo ''
 
 
 
